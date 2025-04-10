@@ -48,12 +48,14 @@ impl Player {
 
 struct Block {
     rect: Rect,
+    lives: i32,
 }
 
 impl Block {
     pub fn new(pos: Vec2) -> Self {
         Self {
-            rect: Rect::new(pos.x, pos.y, BLOCK_SIZE.x, BLOCK_SIZE.y)
+            rect: Rect::new(pos.x, pos.y, BLOCK_SIZE.x, BLOCK_SIZE.y),
+            lives: 1,
         }
     }
     pub fn draw(&self) {
@@ -93,6 +95,14 @@ impl Ball {
     }
 }
 
+// collision with positional correction
+fn resolve_collision(a: &mut Rect, vel: &mut Vec2, b: &Rect) -> bool {
+    if let Some(_intersection) = a.intersect(*b) {
+        vel.y *= -1f32;
+        return true;
+    }
+    false
+}
 
 #[macroquad::main("rustanoid")]
 async fn main() {
@@ -120,6 +130,11 @@ async fn main() {
         for ball in balls.iter_mut() {
             ball.update(get_frame_time());
         }
+        
+        for ball in balls.iter_mut() {
+            resolve_collision(&mut ball.rect, &mut ball.vel, &player.rect);
+        }
+        
         clear_background(WHITE);
         player.draw();
         for block in blocks.iter() {
