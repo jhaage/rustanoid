@@ -67,6 +67,8 @@ impl Player {
 pub enum BlockType {
     Regular,
     SpawnBallOnDeath,
+    Strong,
+    SpawnPowerup,
 }
 
 struct Block {
@@ -77,9 +79,13 @@ struct Block {
 
 impl Block {
     pub fn new(pos: Vec2, block_type: BlockType) -> Self {
+        let lives = match block_type {
+            BlockType::Strong => 4,
+            _ => 2,
+        };
         Self {
             rect: Rect::new(pos.x, pos.y, BLOCK_SIZE.x, BLOCK_SIZE.y),
-            lives: 2,
+            lives,
             block_type,
         }
     }
@@ -90,6 +96,8 @@ impl Block {
                 _ => ORANGE,
             },
             BlockType::SpawnBallOnDeath => GREEN,
+            BlockType::Strong => DARKBLUE,
+            BlockType::SpawnPowerup => YELLOW,
         };
         draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, color);
     }
@@ -124,6 +132,28 @@ impl Ball {
 
     pub fn draw(&self) {
         draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, DARKGRAY);
+    }
+}
+
+struct Powerup {
+    rect: Rect,
+    vel: Vec2,
+}
+
+impl Powerup {
+    pub fn new(pos: Vec2) -> Self {
+        Self {
+            rect: Rect::new(pos.x, pos.y, 30f32, 30f32), // Powerup size
+            vel: vec2(0f32, 1f32), // Falling down
+        }
+    }
+
+    pub fn update(&mut self, dt: f32) {
+        self.rect.y += self.vel.y * dt * 200f32; // Falling speed
+    }
+
+    pub fn draw(&self) {
+        draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, PURPLE);
     }
 }
 
@@ -187,29 +217,60 @@ fn reset_game(
     blocks: &mut Vec<Block>,
     balls: &mut Vec<Ball>,
     player: &mut Player,
+    current_level: usize,
+    level_completed: bool,
 ) {
     *player = Player::new();
-    *score = 0;
-    *player_lives = 3;
     balls.clear();
-    blocks.clear();
-    init_blocks(blocks);
+    init_blocks(blocks, current_level);
+
+    if !level_completed {
+        *score = 0;
+        *player_lives = 3;
+    } else {
+        balls.push(Ball::new(vec2(screen_width() * 0.5f32, screen_height() * 0.5f32)));
+    }
+
 }
 
-fn init_blocks(blocks: &mut Vec<Block>) {
-    let (width, height) = (6, 6);
+fn init_blocks(blocks: &mut Vec<Block>, level: usize) {
+    blocks.clear();
+    let (width, height, block_size, block_lives) = match level {
+        1 => (3, 3, BLOCK_SIZE, 2), // Level 1: Default size and lives
+        2 => (6, 6, BLOCK_SIZE * 0.75, 3), // Level 2: Smaller blocks, more lives
+        _ => (10, 10, BLOCK_SIZE * 0.5, 4), // Level 3+: Even smaller blocks, more lives
+    };
+
     let padding = 5f32;
-    let total_block_size = BLOCK_SIZE + vec2(padding, padding);
-    let board_start_pos = vec2((screen_width() -(total_block_size.x * width as f32))*0.5f32, 50f32);
+    let total_block_size = block_size + vec2(padding, padding);
+    let board_start_pos = vec2((screen_width() - (total_block_size.x * width as f32)) * 0.5f32, 50f32);
+
     for i in 0..width * height {
         let block_x = (i % width) as f32 * total_block_size.x;
         let block_y = (i / width) as f32 * total_block_size.y;
-        blocks.push(Block::new(board_start_pos + vec2(block_x, block_y), BlockType::Regular));
+
+        let block_type = if rand::gen_range(0, 10) < 2 {
+            BlockType::SpawnPowerup // 20% chance to spawn a powerup block
+        } else if rand::gen_range(0, 10) < 4 {
+            BlockType::Strong // 20% chance to spawn a strong block
+        } else {
+            BlockType::Regular
+        };
+
+        blocks.push(Block::new(board_start_pos + vec2(block_x, block_y), block_type));
     }
-    for _ in 0..3 {
-        let rand_index = rand::gen_range(0, blocks.len());
-        blocks[rand_index].block_type = BlockType::SpawnBallOnDeath;
-    }
+}
+
+fn handle_powerup_collision(player: &mut Player, powerups: &mut Vec<Powerup>) {
+    powerups.retain(|powerup| {
+        if powerup.rect.overlaps(&player.rect) {
+            // Apply powerup effect: Increase paddle size
+            player.rect.w += 50f32;
+            false // Remove the powerup after collision
+        } else {
+            true
+        }
+    });
 }
 
 #[macroquad::main("rustanoid")]
@@ -218,30 +279,30 @@ async fn main() {
     let mut game_state = GameState::Menu;
     let mut score = 0;
     let mut player_lives = 3;
+    let mut current_level = 1;
     let mut player = Player::new();
     let mut blocks = Vec::new();
     let mut balls = Vec::new();
+    let mut powerups = Vec::new();
+    let mut level_completed: bool = false;
 
-    init_blocks(&mut blocks);
+    init_blocks(&mut blocks, current_level);
 
     balls.push(Ball::new(vec2(screen_width() * 0.5f32, screen_height() * 0.5f32)));
-    
+
     loop {
         match game_state {
             GameState::Menu => {
                 if is_key_pressed(KeyCode::Space) {
                     game_state = GameState::Game;
                 }
-            },
+            }
             GameState::Game => {
-                if is_key_pressed(KeyCode::Space) {
-                    balls.push(Ball::new(vec2(screen_width() * 0.5f32, screen_height() * 0.5f32)));
-                }
                 player.update(get_frame_time());
                 for ball in balls.iter_mut() {
                     ball.update(get_frame_time());
                 }
-                
+
                 let mut spawn_later = vec![];
                 for ball in balls.iter_mut() {
                     resolve_collision(&mut ball.rect, &mut ball.vel, &player.rect);
@@ -251,8 +312,9 @@ async fn main() {
                             if block.lives <= 0 {
                                 score += 10;
                                 if block.block_type == BlockType::SpawnBallOnDeath {
-                                    // spawn a ball
                                     spawn_later.push(Ball::new(ball.rect.point()));
+                                } else if block.block_type == BlockType::SpawnPowerup {
+                                    powerups.push(Powerup::new(block.rect.point()));
                                 }
                             }
                         }
@@ -261,35 +323,45 @@ async fn main() {
                 for ball in spawn_later.into_iter() {
                     balls.push(ball);
                 }
-        
+
+                for powerup in powerups.iter_mut() {
+                    powerup.update(get_frame_time());
+                }
+                handle_powerup_collision(&mut player, &mut powerups);
+
                 let balls_len = balls.len();
                 balls.retain(|ball| ball.rect.y < screen_height());
                 let removed_balls = balls_len - balls.len();
                 if removed_balls > 0 && balls.is_empty() {
                     player_lives -= 1;
-                    balls.push(Ball::new(player.rect.point()+vec2(player.rect.w*0.5f32+BALL_SIZE*0.5f32, -50f32)));
+                    balls.push(Ball::new(player.rect.point() + vec2(player.rect.w * 0.5f32 + BALL_SIZE * 0.5f32, -50f32)));
                     if player_lives <= 0 {
                         game_state = GameState::Dead;
                     }
                 }
-                
+
                 blocks.retain(|block| block.lives > 0);
                 if blocks.is_empty() {
                     game_state = GameState::LevelCompleted;
                 }
-            },
+            }
             GameState::LevelCompleted => {
+                draw_title_text(&format!("Level {} Completed!", current_level), font);
                 if is_key_pressed(KeyCode::Space) {
+                    current_level += 1;
+                    level_completed = true;
+                    reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player, current_level, level_completed);
                     game_state = GameState::Menu;
-                    reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player);
                 }
-            },
+            }
             GameState::Dead => {
                 if is_key_pressed(KeyCode::Space) {
+                    current_level = 1;
+                    level_completed = false;
+                    reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player, current_level, level_completed);
                     game_state = GameState::Menu;
-                    reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player);
                 }
-            },
+            }
         }
 
         clear_background(WHITE);
@@ -300,36 +372,38 @@ async fn main() {
         for ball in balls.iter() {
             ball.draw();
         }
+        for powerup in powerups.iter() {
+            powerup.draw();
+        }
 
         match game_state {
             GameState::Menu => {
                 draw_title_text("Press SPACE to start", font);
-            },
+            }
             GameState::Game => {
                 let score_text = format!("score: {}", score);
                 let score_text_dim = measure_text(&score_text, Some(font), 30u16, 1.0);
                 draw_text_ex(
                     &score_text,
-                    screen_width() * 0.5f32 - score_text_dim.width*0.5f32,
+                    screen_width() * 0.5f32 - score_text_dim.width * 0.5f32,
                     40.0,
-                    TextParams{font, font_size: 30u16, color: BLACK, ..Default::default()}
+                    TextParams { font, font_size: 30u16, color: BLACK, ..Default::default() },
                 );
-        
+
                 draw_text_ex(
                     &format!("lives: {}", player_lives),
                     30.0,
                     40.0,
                     TextParams { font, font_size: 30u16, color: BLACK, ..Default::default() },
                 );
-            },
+            }
             GameState::LevelCompleted => {
-                draw_title_text(&format!("you win! {} score", score), font);
-            },
+                draw_title_text(&format!("Level {} Completed!", current_level), font);
+            }
             GameState::Dead => {
-                draw_title_text(&format!("you died. {} score", score), font);
-            },
+                draw_title_text(&format!("You died. {} score", score), font);
+            }
         }
-
 
         next_frame().await
     }
