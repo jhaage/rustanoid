@@ -129,32 +129,55 @@ impl Ball {
 
 // collision with positional correction
 fn resolve_collision(a: &mut Rect, vel: &mut Vec2, b: &Rect) -> bool {
-    
-    // early exit
+    // Early exit if no collision
     let intersection = match a.intersect(*b) {
         Some(intersection) => intersection,
         None => return false,
     };
+
     let to = b.center() - a.center();
     let to_signum = to.signum();
-    match intersection.w > intersection.h {
-        true => {
-            // bounce on y
-            a.y -= to_signum.y * intersection.h;
-            match to_signum.y > 0f32 {
-                true => vel.y = -vel.y.abs(),
-                false => vel.y = vel.y.abs(),
-            } 
+
+    if intersection.w > intersection.h {
+        // Bounce on y-axis
+        a.y -= to_signum.y * intersection.h;
+
+        if to_signum.y > 0f32 {
+            vel.y = -vel.y.abs();
+        } else {
+            vel.y = vel.y.abs();
         }
-        false => {
-            // bounce on x
-            a.x -= to_signum.x * intersection.w;
-            match to_signum.x < 0f32 {
-                true => vel.x = vel.x.abs(),
-                false => vel.x = -vel.x.abs(),
+
+        // Adjust trajectory if colliding with the paddle
+        if b.h == PLAYER_SIZE.y {
+            let paddle_center = b.x + b.w * 0.5;
+            let ball_center = a.x + a.w * 0.5;
+            let relative_hit_pos = (ball_center - paddle_center) / (b.w * 0.5);
+
+            // Adjust the x velocity based on the relative hit position
+            vel.x += relative_hit_pos * 1.5; // Increase multiplier for sharper angles
+
+            // Normalize to maintain consistent speed
+            *vel = vel.normalize();
+
+            // Clamp the angle to prevent excessive sharpness
+            let min_y_velocity = 0.5; // Minimum y component to avoid shallow angles
+            if vel.y.abs() < min_y_velocity {
+                vel.y = vel.y.signum() * min_y_velocity;
+                *vel = vel.normalize(); // Re-normalize after clamping
             }
         }
+    } else {
+        // Bounce on x-axis
+        a.x -= to_signum.x * intersection.w;
+
+        if to_signum.x < 0f32 {
+            vel.x = vel.x.abs();
+        } else {
+            vel.x = -vel.x.abs();
+        }
     }
+
     true
 }
 
