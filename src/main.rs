@@ -55,11 +55,15 @@ impl Block {
     pub fn new(pos: Vec2) -> Self {
         Self {
             rect: Rect::new(pos.x, pos.y, BLOCK_SIZE.x, BLOCK_SIZE.y),
-            lives: 1,
+            lives: 2,
         }
     }
     pub fn draw(&self) {
-        draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, DARKBROWN);
+        let color = match self.lives {
+            2 => RED,
+            _ => ORANGE,
+        };
+        draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, color);
     }
 }
 
@@ -97,15 +101,40 @@ impl Ball {
 
 // collision with positional correction
 fn resolve_collision(a: &mut Rect, vel: &mut Vec2, b: &Rect) -> bool {
-    if let Some(_intersection) = a.intersect(*b) {
-        vel.y *= -1f32;
-        return true;
+    
+    // early exit
+    let intersection = match a.intersect(*b) {
+        Some(intersection) => intersection,
+        None => return false,
+    };
+    let to = b.center() - a.center();
+    let to_signum = to.signum();
+    match intersection.w > intersection.h {
+        true => {
+            // bounce on y
+            a.y -= to_signum.y * intersection.h;
+            match to_signum.y > 0f32 {
+                true => vel.y = -vel.y.abs(),
+                false => vel.y = vel.y.abs(),
+            } 
+        }
+        false => {
+            // bounce on x
+            a.x -= to_signum.x * intersection.w;
+            match to_signum.x < 0f32 {
+                true => vel.x = vel.x.abs(),
+                false => vel.x = -vel.x.abs(),
+            }
+        }
     }
-    false
+    true
 }
 
 #[macroquad::main("rustanoid")]
 async fn main() {
+    let font = load_ttf_font("res/Heebo-VariableFont_wght.ttf").await.unwrap();
+    let mut score = 0;
+    let mut player_lives = 3;
     let mut player = Player::new();
     let mut blocks = Vec::new();
     let mut balls = Vec::new();
@@ -136,10 +165,21 @@ async fn main() {
             for block in blocks.iter_mut() {
                 if resolve_collision(&mut ball.rect, &mut ball.vel, &block.rect) {
                     block.lives -= 1;
+                    if block.lives <= 0 {
+                        score += 10;
+                    }
                 }
             }
         }
 
+        let balls_len = balls.len();
+        let was_last_ball = balls_len == 1;
+        balls.retain(|ball| ball.rect.y < screen_height());
+        let removed_balls = balls_len - balls.len();
+        if removed_balls > 0 && was_last_ball {
+            player_lives -= 1;
+        }
+        
         blocks.retain(|block| block.lives > 0);
 
         clear_background(WHITE);
@@ -150,6 +190,22 @@ async fn main() {
         for ball in balls.iter() {
             ball.draw();
         }
+
+        let score_text = format!("score: {}", score);
+        let score_text_dim = measure_text(&score_text, Some(font), 30u16, 1.0);
+        draw_text_ex(
+            &score_text,
+            screen_width() * 0.5f32 - score_text_dim.width*0.5f32,
+            40.0,
+            TextParams{font, font_size: 30u16, color: BLACK, ..Default::default()}
+        );
+
+        draw_text_ex(
+            &format!("lives: {}", player_lives),
+            30.0,
+            40.0,
+            TextParams { font, font_size: 30u16, color: BLACK, ..Default::default() },
+        );
         next_frame().await
     }
 }
