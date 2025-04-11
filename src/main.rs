@@ -130,11 +130,18 @@ async fn main() {
         for ball in balls.iter_mut() {
             ball.update(get_frame_time());
         }
-        
+
         for ball in balls.iter_mut() {
             resolve_collision(&mut ball.rect, &mut ball.vel, &player.rect);
+            for block in blocks.iter_mut() {
+                if resolve_collision(&mut ball.rect, &mut ball.vel, &block.rect) {
+                    block.lives -= 1;
+                }
+            }
         }
-        
+
+        blocks.retain(|block| block.lives > 0);
+
         clear_background(WHITE);
         player.draw();
         for block in blocks.iter() {
