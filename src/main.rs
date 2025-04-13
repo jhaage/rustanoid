@@ -429,15 +429,22 @@ fn handle_powerup_collision(player: &mut Player, powerups: &mut Vec<Powerup>) {
 
 #[macroquad::main("rustanoid")]
 async fn main() {
-    let font = load_ttf_font("res/Heebo-VariableFont_wght.ttf").await.unwrap();
+    // Define base path for assets - will be different for web vs local
+    let base_path = if cfg!(target_arch = "wasm32") {
+        "rustanoid/res/"
+    } else {
+        "res/"
+    };
+
+    let font = load_ttf_font(&format!("{}{}", base_path, "Heebo-VariableFont_wght.ttf")).await.unwrap();
     
     // Load textures
     unsafe {
-        BLOCK_TEXTURE = Some(load_texture("res/block.png").await.unwrap());
-        BALL_TEXTURE = Some(load_texture("res/ball.png").await.unwrap());
-        PADDLE_TEXTURE = Some(load_texture("res/paddle.png").await.unwrap());
-        POWER_UP_TEXTURE = Some(load_texture("res/powerup.png").await.unwrap());
-        BACKGROUND_TEXTURE = Some(load_texture("res/background.png").await.unwrap());
+        BLOCK_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "block.png")).await.unwrap());
+        BALL_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "ball.png")).await.unwrap());
+        PADDLE_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "paddle.png")).await.unwrap());
+        POWER_UP_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "powerup.png")).await.unwrap());
+        BACKGROUND_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "background.png")).await.unwrap());
     }
 
     let mut game_state = GameState::Menu;

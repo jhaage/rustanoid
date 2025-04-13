@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rustanoid</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #2c2c2c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #glcanvas {
+            width: 800px;
+            height: 600px;
+            background: black;
+        }
+        @media (max-width: 840px) {
+            #glcanvas {
+                width: 95vw;
+                height: 71.25vw; /* Maintains 4:3 aspect ratio */
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glcanvas" tabindex="1"></canvas>
+    <!-- Minified and statically hosted version of https://github.com/not-fl3/miniquad/blob/master/native/sapp-wasm/js/gl.js -->
+    <script src="https://not-fl3.github.io/miniquad-samples/gl.js"></script>
+    <script>load("rustanoid.wasm");</script>
+</body>
+</html>
