@@ -1,10 +1,18 @@
 use macroquad::prelude::*;
 
+// Global static textures
+static mut BLOCK_TEXTURE: Option<Texture2D> = None;
+static mut BALL_TEXTURE: Option<Texture2D> = None;
+static mut PADDLE_TEXTURE: Option<Texture2D> = None;
+static mut POWER_UP_TEXTURE: Option<Texture2D> = None;
+static mut BACKGROUND_TEXTURE: Option<Texture2D> = None;
+
 const PLAYER_SIZE: Vec2 = Vec2::from_array([150f32, 40f32]);
 const PLAYER_SPEED: f32 = 700f32;
 const BLOCK_SIZE: Vec2 = Vec2::from_array([100f32, 40f32]);
 const BALL_SIZE: f32 = 50f32;
 const BALL_SPEED: f32 = 400f32;
+const MAX_BLOCK_LIVES: i32 = 3;
 
 pub fn draw_title_text(text: &str, font: Font) {
     let dims = measure_text(text, Some(font), 50u16, 1.0f32);
@@ -59,7 +67,20 @@ impl Player {
     }
 
     pub fn draw(&self) {
-        draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, BLUE);
+        unsafe {
+            if let Some(texture) = PADDLE_TEXTURE {
+                draw_texture_ex(
+                    texture,
+                    self.rect.x,
+                    self.rect.y,
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
     }
 }
 
@@ -67,7 +88,8 @@ impl Player {
 pub enum BlockType {
     Regular,
     SpawnBallOnDeath,
-    Strong,
+    Medium,  // 2 lives
+    Strong,  // 3 lives
     SpawnPowerup,
 }
 
@@ -78,28 +100,51 @@ struct Block {
 }
 
 impl Block {
-    pub fn new(pos: Vec2, block_type: BlockType) -> Self {
+    pub fn new(pos: Vec2, block_type: BlockType, size: Vec2) -> Self {
         let lives = match block_type {
-            BlockType::Strong => 4,
-            _ => 2,
+            BlockType::Strong => 3,
+            BlockType::Medium => 2,
+            _ => 1,
         };
         Self {
-            rect: Rect::new(pos.x, pos.y, BLOCK_SIZE.x, BLOCK_SIZE.y),
+            rect: Rect::new(pos.x, pos.y, size.x, size.y),
             lives,
             block_type,
         }
     }
+
     pub fn draw(&self) {
         let color = match self.block_type {
-            BlockType::Regular => match self.lives {
-                2 => RED,
-                _ => ORANGE,
+            BlockType::Regular => WHITE,
+            BlockType::Medium => match self.lives {
+                2 => ORANGE,
+                1 => YELLOW,
+                _ => unreachable!(),
+            },
+            BlockType::Strong => match self.lives {
+                3 => RED,
+                2 => ORANGE,
+                1 => YELLOW,
+                _ => unreachable!(),
             },
             BlockType::SpawnBallOnDeath => GREEN,
-            BlockType::Strong => DARKBLUE,
-            BlockType::SpawnPowerup => YELLOW,
+            BlockType::SpawnPowerup => BLUE,
         };
-        draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, color);
+        
+        unsafe {
+            if let Some(texture) = BLOCK_TEXTURE {
+                draw_texture_ex(
+                    texture,
+                    self.rect.x,
+                    self.rect.y,
+                    color,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
     }
 }
 
@@ -110,28 +155,59 @@ struct Ball {
 
 impl Ball {
     pub fn new(pos: Vec2) -> Self {
+        let random_angle = rand::gen_range(-45f32, 45f32).to_radians();
+        let direction = vec2(random_angle.sin(), -random_angle.cos());
+        
         Self {
             rect: Rect::new(pos.x, pos.y, BALL_SIZE, BALL_SIZE),
-            vel: vec2(rand::gen_range(-1f32, 1f32), 1f32).normalize(),
+            vel: direction.normalize(),
         }
     }
 
     pub fn update(&mut self, dt: f32) {
-        self.rect.x += self.vel.x * dt * BALL_SPEED;
-        self.rect.y += self.vel.y * dt * BALL_SPEED;
+        // Cap the maximum delta time to prevent large jumps
+        let capped_dt = dt.min(1.0 / 60.0);
+        
+        // Store old position for collision checking
+        let old_pos = self.rect.point();
+        
+        // Update position
+        self.rect.x += self.vel.x * capped_dt * BALL_SPEED;
+        self.rect.y += self.vel.y * capped_dt * BALL_SPEED;
+
+        // Handle screen bounds with proper reflection
         if self.rect.x < 0f32 {
-            self.vel.x = 1f32;
+            self.rect.x = 0f32;
+            self.vel.x = -self.vel.x;
         }
         if self.rect.x > screen_width() - self.rect.w {
-            self.vel.x = -1f32;
+            self.rect.x = screen_width() - self.rect.w;
+            self.vel.x = -self.vel.x;
         }
         if self.rect.y < 0f32 {
-            self.vel.y = 1f32;
+            self.rect.y = 0f32;
+            self.vel.y = -self.vel.y;
         }
+        
+        // Ensure velocity stays normalized
+        self.vel = self.vel.normalize();
     }
 
     pub fn draw(&self) {
-        draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, DARKGRAY);
+        unsafe {
+            if let Some(texture) = BALL_TEXTURE {
+                draw_texture_ex(
+                    texture,
+                    self.rect.x,
+                    self.rect.y,
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
     }
 }
 
@@ -153,7 +229,20 @@ impl Powerup {
     }
 
     pub fn draw(&self) {
-        draw_rectangle(self.rect.x, self.rect.y, self.rect.w, self.rect.h, PURPLE);
+        unsafe {
+            if let Some(texture) = POWER_UP_TEXTURE {
+                draw_texture_ex(
+                    texture,
+                    self.rect.x,
+                    self.rect.y,
+                    PURPLE,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
+                        ..Default::default()
+                    },
+                );
+            }
+        }
     }
 }
 
@@ -221,51 +310,116 @@ fn reset_game(
     level_completed: bool,
 ) {
     *player = Player::new();
-    balls.clear();
     init_blocks(blocks, current_level);
 
     if !level_completed {
+        // Reset everything for game over
+        balls.clear();
         *score = 0;
         *player_lives = 3;
+        balls.push(Ball::new(vec2(screen_width() * 0.5f32, screen_height() * 0.5f32)));
     } else {
+        // Just reset ball position for next level
+        balls.clear();
         balls.push(Ball::new(vec2(screen_width() * 0.5f32, screen_height() * 0.5f32)));
     }
-
 }
 
 fn init_blocks(blocks: &mut Vec<Block>, level: usize) {
     blocks.clear();
-    let (width, height, block_size, block_lives) = match level {
-        1 => (3, 3, BLOCK_SIZE, 2), // Level 1: Default size and lives
-        2 => (6, 6, BLOCK_SIZE * 0.75, 3), // Level 2: Smaller blocks, more lives
-        _ => (10, 10, BLOCK_SIZE * 0.5, 4), // Level 3+: Even smaller blocks, more lives
+    let (width, height) = match level {
+        1 => (4, 3),      // Level 1: Wider but fewer rows
+        2 => (6, 4),      // Level 2: More blocks
+        3 => (8, 5),      // Level 3: Even more blocks
+        _ => (10, 6),     // Level 4+: Maximum difficulty
     };
 
-    let padding = 5f32;
-    let total_block_size = block_size + vec2(padding, padding);
-    let board_start_pos = vec2((screen_width() - (total_block_size.x * width as f32)) * 0.5f32, 50f32);
+    // Calculate the size of blocks to fit the screen width with padding
+    let padding = 2.0; // Reduced padding
+    let available_width = screen_width() * 0.9;
+    let block_width = (available_width - (padding * (width as f32 - 1.0))) / width as f32;
+    let block_height = block_width * (BLOCK_SIZE.y / BLOCK_SIZE.x);
+    let actual_block_size = vec2(block_width, block_height);
 
+    let board_width = (width as f32 * block_width) + ((width - 1) as f32 * padding);
+    let board_start_x = (screen_width() - board_width) * 0.5;
+    let board_start_y = 50f32;
+
+    // Create initial block layout
+    let mut temp_blocks = Vec::new();
     for i in 0..width * height {
-        let block_x = (i % width) as f32 * total_block_size.x;
-        let block_y = (i / width) as f32 * total_block_size.y;
-
-        let block_type = if rand::gen_range(0, 10) < 2 {
-            BlockType::SpawnPowerup // 20% chance to spawn a powerup block
-        } else if rand::gen_range(0, 10) < 4 {
-            BlockType::Strong // 20% chance to spawn a strong block
-        } else {
-            BlockType::Regular
+        let block_x = board_start_x + (i % width) as f32 * (block_width + padding);
+        let block_y = board_start_y + (i / width) as f32 * (block_height + padding);
+        
+        // Create varied patterns based on level
+        let should_create_block = match level {
+            1 => true,  // Level 1: Simple full pattern
+            2 => {
+                // Level 2: Checkerboard pattern in top row
+                let row = i / width;
+                if row == 0 {
+                    (i % width) % 2 == 0
+                } else {
+                    true
+                }
+            },
+            3 => {
+                // Level 3: Alternating gaps in top two rows
+                let row = i / width;
+                if row < 2 {
+                    (i % width + row) % 2 == 0
+                } else {
+                    true
+                }
+            },
+            _ => {
+                // Level 4+: Random gaps in top rows with increasing complexity
+                let row = i / width;
+                if row < 2 {
+                    rand::gen_range(0, 100) < 70  // 70% chance of block in top rows
+                } else {
+                    rand::gen_range(0, 100) < 90  // 90% chance of block in other rows
+                }
+            }
         };
 
-        blocks.push(Block::new(board_start_pos + vec2(block_x, block_y), block_type));
+        if should_create_block {
+            let block_type = if level >= 4 && rand::gen_range(0, 10) < 1 {
+                BlockType::Strong
+            } else if rand::gen_range(0, 10) < 2 {
+                BlockType::Medium
+            } else if rand::gen_range(0, 10) < 1 {
+                BlockType::SpawnPowerup
+            } else {
+                BlockType::Regular
+            };
+
+            temp_blocks.push(Block::new(
+                vec2(block_x, block_y),
+                block_type,
+                actual_block_size,
+            ));
+        }
     }
+
+    // Ensure at least one powerup block per level
+    if !temp_blocks.iter().any(|b| b.block_type == BlockType::SpawnPowerup) {
+        let random_index = rand::gen_range(0, temp_blocks.len());
+        if let Some(block) = temp_blocks.get_mut(random_index) {
+            block.block_type = BlockType::SpawnPowerup;
+        }
+    }
+
+    *blocks = temp_blocks;
 }
 
 fn handle_powerup_collision(player: &mut Player, powerups: &mut Vec<Powerup>) {
+    let max_paddle_width = screen_width() / 3.0;
+    
     powerups.retain(|powerup| {
         if powerup.rect.overlaps(&player.rect) {
-            // Apply powerup effect: Increase paddle size
-            player.rect.w += 50f32;
+            // Apply powerup effect: Increase paddle size, but limit to max width
+            player.rect.w = (player.rect.w + 50f32).min(max_paddle_width);
             false // Remove the powerup after collision
         } else {
             true
@@ -276,6 +430,16 @@ fn handle_powerup_collision(player: &mut Player, powerups: &mut Vec<Powerup>) {
 #[macroquad::main("rustanoid")]
 async fn main() {
     let font = load_ttf_font("res/Heebo-VariableFont_wght.ttf").await.unwrap();
+    
+    // Load textures
+    unsafe {
+        BLOCK_TEXTURE = Some(load_texture("res/block.png").await.unwrap());
+        BALL_TEXTURE = Some(load_texture("res/ball.png").await.unwrap());
+        PADDLE_TEXTURE = Some(load_texture("res/paddle.png").await.unwrap());
+        POWER_UP_TEXTURE = Some(load_texture("res/powerup.png").await.unwrap());
+        BACKGROUND_TEXTURE = Some(load_texture("res/background.png").await.unwrap());
+    }
+
     let mut game_state = GameState::Menu;
     let mut score = 0;
     let mut player_lives = 3;
@@ -364,7 +528,23 @@ async fn main() {
             }
         }
 
-        clear_background(WHITE);
+        unsafe {
+            if let Some(bg_texture) = BACKGROUND_TEXTURE {
+                draw_texture_ex(
+                    bg_texture,
+                    0.0,
+                    0.0,
+                    Color::new(0.7, 0.7, 0.7, 1.0),  // Slightly dimmed
+                    DrawTextureParams {
+                        dest_size: Some(vec2(screen_width(), screen_height())),
+                        ..Default::default()
+                    },
+                );
+            } else {
+                clear_background(Color::new(0.1, 0.1, 0.2, 1.0));  // Dark blue fallback
+            }
+        }
+
         player.draw();
         for block in blocks.iter() {
             block.draw();
@@ -396,12 +576,21 @@ async fn main() {
                     40.0,
                     TextParams { font, font_size: 30u16, color: BLACK, ..Default::default() },
                 );
+
+                let level_text: String = format!("Level: {}", current_level);
+                let level_text_dim = measure_text(&level_text, Some(font), 30u16, 1.0);
+                draw_text_ex(
+                    &level_text,
+                    screen_width() - level_text_dim.width - 30.0,
+                    40.0,
+                    TextParams { font, font_size: 30u16, color: BLACK, ..Default::default()},
+                );
             }
             GameState::LevelCompleted => {
                 draw_title_text(&format!("Level {} Completed!", current_level), font);
             }
             GameState::Dead => {
-                draw_title_text(&format!("You died. {} score", score), font);
+                draw_title_text(&format!("Game over. Your score: {}", score), font);
             }
         }
 
