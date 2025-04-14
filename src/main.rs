@@ -1,18 +1,20 @@
 use macroquad::prelude::*;
 
-// Global static textures
-static mut BLOCK_TEXTURE: Option<Texture2D> = None;
-static mut BALL_TEXTURE: Option<Texture2D> = None;
-static mut PADDLE_TEXTURE: Option<Texture2D> = None;
-static mut POWER_UP_TEXTURE: Option<Texture2D> = None;
-static mut BACKGROUND_TEXTURE: Option<Texture2D> = None;
+mod game_objects;
+use game_objects::{
+    ball::{Ball, BALL_SIZE},
+    block::{Block, BlockType, BLOCK_SIZE},
+    player::{Player, PLAYER_SIZE},
+    powerup::Powerup,
+    texture_manager::TextureManager,
+};
 
-const PLAYER_SIZE: Vec2 = Vec2::from_array([150f32, 40f32]);
-const PLAYER_SPEED: f32 = 700f32;
-const BLOCK_SIZE: Vec2 = Vec2::from_array([100f32, 40f32]);
-const BALL_SIZE: f32 = 50f32;
-const BALL_SPEED: f32 = 400f32;
-const MAX_BLOCK_LIVES: i32 = 3;
+pub enum GameState {
+    Menu,
+    Game,
+    LevelCompleted,
+    Dead,
+}
 
 pub fn draw_title_text(text: &str, font: Font) {
     let dims = measure_text(text, Some(font), 50u16, 1.0f32);
@@ -22,228 +24,6 @@ pub fn draw_title_text(text: &str, font: Font) {
         screen_height() * 0.5f32 - dims.height * 0.5f32,
         TextParams{font, font_size: 50u16, color: BLACK, ..Default::default()}
     );
-}
-
-pub enum GameState {
-    Menu,
-    Game,
-    LevelCompleted,
-    Dead,
-}
-
-struct Player {
-    rect: Rect,
-}
-
-impl Player {
-    pub fn new() -> Self {
-        Self {
-            rect: Rect::new(
-                screen_width() * 0.5f32 - PLAYER_SIZE.x*0.5f32,
-                screen_height() - 100f32,
-                PLAYER_SIZE.x,
-                PLAYER_SIZE.y,
-            ),
-        }
-    }
-
-    pub fn update(&mut self, dt: f32) {
-        let mut x_move = 0f32;
-        if is_key_down(KeyCode::Left) {
-            x_move -= 1f32;
-        }
-        if is_key_down(KeyCode::Right) {
-            x_move += 1f32;
-        }
-        self.rect.x += x_move * dt * PLAYER_SPEED;
-
-        if self.rect.x < 0f32 {
-            self.rect.x = 0f32;
-        }
-        if self.rect.x > screen_width() - self.rect.w {
-            self.rect.x = screen_width() - self.rect.w;
-        }
-
-    }
-
-    pub fn draw(&self) {
-        unsafe {
-            if let Some(texture) = PADDLE_TEXTURE {
-                draw_texture_ex(
-                    texture,
-                    self.rect.x,
-                    self.rect.y,
-                    WHITE,
-                    DrawTextureParams {
-                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
-                        ..Default::default()
-                    },
-                );
-            }
-        }
-    }
-}
-
-#[derive(PartialEq)]
-pub enum BlockType {
-    Regular,
-    SpawnBallOnDeath,
-    Medium,  // 2 lives
-    Strong,  // 3 lives
-    SpawnPowerup,
-}
-
-struct Block {
-    rect: Rect,
-    lives: i32,
-    block_type: BlockType,
-}
-
-impl Block {
-    pub fn new(pos: Vec2, block_type: BlockType, size: Vec2) -> Self {
-        let lives = match block_type {
-            BlockType::Strong => 3,
-            BlockType::Medium => 2,
-            _ => 1,
-        };
-        Self {
-            rect: Rect::new(pos.x, pos.y, size.x, size.y),
-            lives,
-            block_type,
-        }
-    }
-
-    pub fn draw(&self) {
-        let color = match self.block_type {
-            BlockType::Regular => WHITE,
-            BlockType::Medium => match self.lives {
-                2 => ORANGE,
-                1 => YELLOW,
-                _ => unreachable!(),
-            },
-            BlockType::Strong => match self.lives {
-                3 => RED,
-                2 => ORANGE,
-                1 => YELLOW,
-                _ => unreachable!(),
-            },
-            BlockType::SpawnBallOnDeath => GREEN,
-            BlockType::SpawnPowerup => BLUE,
-        };
-        
-        unsafe {
-            if let Some(texture) = BLOCK_TEXTURE {
-                draw_texture_ex(
-                    texture,
-                    self.rect.x,
-                    self.rect.y,
-                    color,
-                    DrawTextureParams {
-                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
-                        ..Default::default()
-                    },
-                );
-            }
-        }
-    }
-}
-
-struct Ball {
-    rect: Rect,
-    vel: Vec2,
-}
-
-impl Ball {
-    pub fn new(pos: Vec2) -> Self {
-        let random_angle = rand::gen_range(-45f32, 45f32).to_radians();
-        let direction = vec2(random_angle.sin(), -random_angle.cos());
-        
-        Self {
-            rect: Rect::new(pos.x, pos.y, BALL_SIZE, BALL_SIZE),
-            vel: direction.normalize(),
-        }
-    }
-
-    pub fn update(&mut self, dt: f32) {
-        // Cap the maximum delta time to prevent large jumps
-        let capped_dt = dt.min(1.0 / 60.0);
-        
-        // Store old position for collision checking
-        let old_pos = self.rect.point();
-        
-        // Update position
-        self.rect.x += self.vel.x * capped_dt * BALL_SPEED;
-        self.rect.y += self.vel.y * capped_dt * BALL_SPEED;
-
-        // Handle screen bounds with proper reflection
-        if self.rect.x < 0f32 {
-            self.rect.x = 0f32;
-            self.vel.x = -self.vel.x;
-        }
-        if self.rect.x > screen_width() - self.rect.w {
-            self.rect.x = screen_width() - self.rect.w;
-            self.vel.x = -self.vel.x;
-        }
-        if self.rect.y < 0f32 {
-            self.rect.y = 0f32;
-            self.vel.y = -self.vel.y;
-        }
-        
-        // Ensure velocity stays normalized
-        self.vel = self.vel.normalize();
-    }
-
-    pub fn draw(&self) {
-        unsafe {
-            if let Some(texture) = BALL_TEXTURE {
-                draw_texture_ex(
-                    texture,
-                    self.rect.x,
-                    self.rect.y,
-                    WHITE,
-                    DrawTextureParams {
-                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
-                        ..Default::default()
-                    },
-                );
-            }
-        }
-    }
-}
-
-struct Powerup {
-    rect: Rect,
-    vel: Vec2,
-}
-
-impl Powerup {
-    pub fn new(pos: Vec2) -> Self {
-        Self {
-            rect: Rect::new(pos.x, pos.y, 30f32, 30f32), // Powerup size
-            vel: vec2(0f32, 1f32), // Falling down
-        }
-    }
-
-    pub fn update(&mut self, dt: f32) {
-        self.rect.y += self.vel.y * dt * 200f32; // Falling speed
-    }
-
-    pub fn draw(&self) {
-        unsafe {
-            if let Some(texture) = POWER_UP_TEXTURE {
-                draw_texture_ex(
-                    texture,
-                    self.rect.x,
-                    self.rect.y,
-                    PURPLE,
-                    DrawTextureParams {
-                        dest_size: Some(vec2(self.rect.w, self.rect.h)),
-                        ..Default::default()
-                    },
-                );
-            }
-        }
-    }
 }
 
 // collision with positional correction
@@ -429,7 +209,7 @@ fn handle_powerup_collision(player: &mut Player, powerups: &mut Vec<Powerup>) {
 
 #[macroquad::main("rustanoid")]
 async fn main() {
-    // Define base path for assets - will be different for web vs local
+    // Define base path for assets - will be different for web assembly (./serve.sh and next.js website) vs cargo run
     let base_path = if cfg!(target_arch = "wasm32") {
         "rustanoid/res/"
     } else {
@@ -438,14 +218,9 @@ async fn main() {
 
     let font = load_ttf_font(&format!("{}{}", base_path, "Heebo-VariableFont_wght.ttf")).await.unwrap();
     
-    // Load textures
-    unsafe {
-        BLOCK_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "block.png")).await.unwrap());
-        BALL_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "ball.png")).await.unwrap());
-        PADDLE_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "paddle.png")).await.unwrap());
-        POWER_UP_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "powerup.png")).await.unwrap());
-        BACKGROUND_TEXTURE = Some(load_texture(&format!("{}{}", base_path, "background.png")).await.unwrap());
-    }
+    // Initialize managers
+    let mut texture_manager = TextureManager::new();
+    texture_manager.load_textures(base_path).await;
 
     let mut game_state = GameState::Menu;
     let mut score = 0;
@@ -458,7 +233,6 @@ async fn main() {
     let mut level_completed: bool = false;
 
     init_blocks(&mut blocks, current_level);
-
     balls.push(Ball::new(vec2(screen_width() * 0.5f32, screen_height() * 0.5f32)));
 
     loop {
@@ -476,10 +250,13 @@ async fn main() {
 
                 let mut spawn_later = vec![];
                 for ball in balls.iter_mut() {
-                    resolve_collision(&mut ball.rect, &mut ball.vel, &player.rect);
+                    if resolve_collision(&mut ball.rect, &mut ball.vel, &player.rect) {
+                        // Audio removed
+                    }
                     for block in blocks.iter_mut() {
                         if resolve_collision(&mut ball.rect, &mut ball.vel, &block.rect) {
                             block.lives -= 1;
+                            // Audio removed
                             if block.lives <= 0 {
                                 score += 10;
                                 if block.block_type == BlockType::SpawnBallOnDeath {
@@ -517,7 +294,6 @@ async fn main() {
                 }
             }
             GameState::LevelCompleted => {
-                draw_title_text(&format!("Level {} Completed!", current_level), font);
                 if is_key_pressed(KeyCode::Space) {
                     current_level += 1;
                     level_completed = true;
@@ -535,32 +311,30 @@ async fn main() {
             }
         }
 
-        unsafe {
-            if let Some(bg_texture) = BACKGROUND_TEXTURE {
-                draw_texture_ex(
-                    bg_texture,
-                    0.0,
-                    0.0,
-                    Color::new(0.7, 0.7, 0.7, 1.0),  // Slightly dimmed
-                    DrawTextureParams {
-                        dest_size: Some(vec2(screen_width(), screen_height())),
-                        ..Default::default()
-                    },
-                );
-            } else {
-                clear_background(Color::new(0.1, 0.1, 0.2, 1.0));  // Dark blue fallback
-            }
+        if let Some(bg_texture) = texture_manager.background_texture {
+            draw_texture_ex(
+                bg_texture,
+                0.0,
+                0.0,
+                Color::new(0.7, 0.7, 0.7, 1.0),
+                DrawTextureParams {
+                    dest_size: Some(vec2(screen_width(), screen_height())),
+                    ..Default::default()
+                },
+            );
+        } else {
+            clear_background(Color::new(0.1, 0.1, 0.2, 1.0));
         }
 
-        player.draw();
+        player.draw(&texture_manager);
         for block in blocks.iter() {
-            block.draw();
+            block.draw(&texture_manager);
         }
         for ball in balls.iter() {
-            ball.draw();
+            ball.draw(&texture_manager);
         }
         for powerup in powerups.iter() {
-            powerup.draw();
+            powerup.draw(&texture_manager);
         }
 
         match game_state {
@@ -584,7 +358,7 @@ async fn main() {
                     TextParams { font, font_size: 30u16, color: BLACK, ..Default::default() },
                 );
 
-                let level_text: String = format!("Level: {}", current_level);
+                let level_text = format!("Level: {}", current_level);
                 let level_text_dim = measure_text(&level_text, Some(font), 30u16, 1.0);
                 draw_text_ex(
                     &level_text,
