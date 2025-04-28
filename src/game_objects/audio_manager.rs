@@ -21,6 +21,16 @@ impl AudioManager {
         self.background_music = Some(load_sound(&format!("{}sounds/background_music.ogg", base_path)).await.unwrap());
     }
 
+    pub fn play_sound_effect(&self, effect_type: &str) {
+        match effect_type {
+            "bounce" | "paddle_hit" => self.play_paddle_hit(),
+            "block_hit" | "brick_hit" => self.play_brick_hit(),
+            "block_destroyed" => self.play_brick_hit(), // Same sound for now
+            "life_lost" => self.play_brick_hit(),       // Reusing brick hit sound for life lost
+            _ => {}
+        }
+    }
+
     pub fn play_paddle_hit(&self) {
         if let Some(sound) = self.paddle_hit {
             play_sound(sound, PlaySoundParams {

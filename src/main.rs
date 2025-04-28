@@ -7,6 +7,7 @@ use game_objects::{
     player::{Player, PLAYER_SIZE},
     powerup::Powerup,
     texture_manager::TextureManager,
+    audio_manager::AudioManager,
 };
 
 pub enum GameState {
@@ -221,6 +222,11 @@ async fn main() {
     // Initialize managers
     let mut texture_manager = TextureManager::new();
     texture_manager.load_textures(base_path).await;
+    
+    // Initialize and load audio
+    let mut audio_manager = AudioManager::new();
+    audio_manager.load_sounds(base_path).await;
+    audio_manager.play_background_music();
 
     let mut game_state = GameState::Menu;
     let mut score = 0;
@@ -251,14 +257,15 @@ async fn main() {
                 let mut spawn_later = vec![];
                 for ball in balls.iter_mut() {
                     if resolve_collision(&mut ball.rect, &mut ball.vel, &player.rect) {
-                        // Audio removed
+                        audio_manager.play_sound_effect("bounce");
                     }
                     for block in blocks.iter_mut() {
                         if resolve_collision(&mut ball.rect, &mut ball.vel, &block.rect) {
                             block.lives -= 1;
-                            // Audio removed
+                            audio_manager.play_sound_effect("block_hit");
                             if block.lives <= 0 {
                                 score += 10;
+                                audio_manager.play_sound_effect("block_destroyed");
                                 if block.block_type == BlockType::SpawnBallOnDeath {
                                     spawn_later.push(Ball::new(ball.rect.point()));
                                 } else if block.block_type == BlockType::SpawnPowerup {
@@ -282,6 +289,7 @@ async fn main() {
                 let removed_balls = balls_len - balls.len();
                 if removed_balls > 0 && balls.is_empty() {
                     player_lives -= 1;
+                    audio_manager.play_sound_effect("life_lost");
                     balls.push(Ball::new(player.rect.point() + vec2(player.rect.w * 0.5f32 + BALL_SIZE * 0.5f32, -50f32)));
                     if player_lives <= 0 {
                         game_state = GameState::Dead;
