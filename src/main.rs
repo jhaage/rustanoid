@@ -10,6 +10,7 @@ use game_objects::{
     audio_manager::AudioManager,
 };
 
+#[derive(PartialEq)]
 pub enum GameState {
     Menu,
     Game,
@@ -133,7 +134,7 @@ fn init_blocks(blocks: &mut Vec<Block>, level: usize) {
     // Generate blocks based on the layout pattern
     for y in 0..height {
         for x in 0..width {
-            let index = y * width + x;
+            let _index = y * width + x;
             
             // Check if we should create a block at this position
             if let Some(block_type) = layout.get_block_at(x, y) {
@@ -575,7 +576,7 @@ fn get_level_layout(level: usize) -> LevelLayout {
             let difficulty_factor = (level / 10) + 1;
             
             for i in 0..pattern.len() {
-                if let Some(block_type) = pattern[i] {
+                if let Some(_block_type) = pattern[i] {
                     // As levels progress, increase the chance of stronger blocks
                     let random_val = rand::gen_range(0, 10);
                     if random_val < difficulty_factor {
@@ -639,11 +640,84 @@ async fn main() {
     let mut balls = Vec::new();
     let mut powerups = Vec::new();
     let mut level_completed: bool = false;
+    
+    // For development/testing - enables level jumping with keyboard shortcuts
+    let mut dev_mode = true;
+    let mut show_dev_message = false;
+    let mut dev_message_timer = 0.0;
 
     init_blocks(&mut blocks, current_level);
     balls.push(Ball::new(vec2(screen_width() * 0.5f32, screen_height() * 0.5f32)));
 
     loop {
+        // Level jumping shortcuts for development/testing
+        if dev_mode {
+            // Number keys 1-9 to jump to levels 1-9
+            for i in 1..=9 {
+                if is_key_pressed(match i {
+                    1 => KeyCode::Key1,
+                    2 => KeyCode::Key2,
+                    3 => KeyCode::Key3,
+                    4 => KeyCode::Key4,
+                    5 => KeyCode::Key5,
+                    6 => KeyCode::Key6,
+                    7 => KeyCode::Key7,
+                    8 => KeyCode::Key8,
+                    9 => KeyCode::Key9,
+                    _ => KeyCode::Key0,
+                }) {
+                    current_level = i;
+                    level_completed = true;
+                    reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player, current_level, level_completed);
+                    game_state = GameState::Game;
+                    show_dev_message = true;
+                    dev_message_timer = 2.0; // Show message for 2 seconds
+                }
+            }
+            
+            // 0 key for level 10
+            if is_key_pressed(KeyCode::Key0) {
+                current_level = 10;
+                level_completed = true;
+                reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player, current_level, level_completed);
+                game_state = GameState::Game;
+                show_dev_message = true;
+                dev_message_timer = 2.0;
+            }
+            
+            // Page Up/Down to cycle through levels
+            if is_key_pressed(KeyCode::PageUp) && game_state == GameState::Game {
+                current_level = (current_level + 1).min(20); // Limit to 20 levels for safety
+                level_completed = true;
+                reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player, current_level, level_completed);
+                show_dev_message = true;
+                dev_message_timer = 2.0;
+            }
+            
+            if is_key_pressed(KeyCode::PageDown) && game_state == GameState::Game {
+                current_level = (current_level - 1).max(1); // Don't go below level 1
+                level_completed = true;
+                reset_game(&mut score, &mut player_lives, &mut blocks, &mut balls, &mut player, current_level, level_completed);
+                show_dev_message = true;
+                dev_message_timer = 2.0;
+            }
+            
+            // Toggle dev mode with F12
+            if is_key_pressed(KeyCode::F12) {
+                dev_mode = !dev_mode;
+                show_dev_message = true;
+                dev_message_timer = 2.0;
+            }
+            
+            // Update dev message timer
+            if show_dev_message {
+                dev_message_timer -= get_frame_time();
+                if dev_message_timer <= 0.0 {
+                    show_dev_message = false;
+                }
+            }
+        }
+
         match game_state {
             GameState::Menu => {
                 if is_key_pressed(KeyCode::Space) {
@@ -652,8 +726,24 @@ async fn main() {
             }
             GameState::Game => {
                 player.update(get_frame_time());
+                
                 for ball in balls.iter_mut() {
+                    // Store position before update to detect wall collisions
+                    let prev_x = ball.rect.x;
+                    let prev_y = ball.rect.y;
+                    let prev_right = ball.rect.x + ball.rect.w;
+                    
+                    // Update ball position
                     ball.update(get_frame_time());
+                    
+                    // Detect wall collisions more reliably
+                    let hit_left_wall = prev_x > 0.0 && ball.rect.x <= 0.01;
+                    let hit_right_wall = prev_right < screen_width() && ball.rect.x + ball.rect.w >= screen_width() - 0.01;
+                    let hit_ceiling = prev_y > 0.0 && ball.rect.y <= 0.01;
+                    
+                    if hit_left_wall || hit_right_wall || hit_ceiling {
+                        audio_manager.play_sound_effect("wall_hit");
+                    }
                 }
 
                 let mut spawn_later = vec![];
@@ -777,6 +867,18 @@ async fn main() {
                     40.0,
                     TextParams { font, font_size: 30u16, color: BLACK, ..Default::default()},
                 );
+
+                // Show dev mode message if enabled
+                if dev_mode && show_dev_message {
+                    let dev_message = format!("Dev Mode: Level {}", current_level);
+                    let dev_message_dim = measure_text(&dev_message, Some(font), 20u16, 1.0);
+                    draw_text_ex(
+                        &dev_message,
+                        screen_width() * 0.5f32 - dev_message_dim.width * 0.5f32,
+                        screen_height() - 40.0,
+                        TextParams { font, font_size: 20u16, color: RED, ..Default::default() },
+                    );
+                }
             }
             GameState::LevelCompleted => {
                 draw_title_text(&format!("Level {} Completed!", current_level), font);

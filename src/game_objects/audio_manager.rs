@@ -7,6 +7,7 @@ pub struct AudioManager {
     pub life_lost: Option<Sound>,
     pub level_completed: Option<Sound>,
     pub powerup_collected: Option<Sound>,
+    pub wall_hit: Option<Sound>,
     pub background_music: Option<Sound>,
 }
 
@@ -19,6 +20,7 @@ impl AudioManager {
             life_lost: None,
             level_completed: None,
             powerup_collected: None,
+            wall_hit: None,
             background_music: None,
         }
     }
@@ -27,12 +29,10 @@ impl AudioManager {
         self.paddle_hit = Some(load_sound(&format!("{}sounds/paddle_hit.wav", base_path)).await.unwrap());
         self.brick_hit = Some(load_sound(&format!("{}sounds/brick_hit.wav", base_path)).await.unwrap());
         self.brick_destroyed = Some(load_sound(&format!("{}sounds/brick_destroyed.wav", base_path)).await.unwrap());
-        // For now, we'll reuse paddle_hit.wav for life_lost since we don't have a specific sound for it yet
-        self.life_lost = Some(load_sound(&format!("{}sounds/paddle_hit.wav", base_path)).await.unwrap());
-        // For now, we'll reuse brick_destroyed.wav for level_completed since we don't have a specific sound for it yet
-        self.level_completed = Some(load_sound(&format!("{}sounds/brick_destroyed.wav", base_path)).await.unwrap());
-        // For now, we'll reuse brick_hit.wav for powerup_collected since we don't have a specific sound for it yet
-        self.powerup_collected = Some(load_sound(&format!("{}sounds/brick_hit.wav", base_path)).await.unwrap());
+        self.life_lost = Some(load_sound(&format!("{}sounds/life_lost.wav", base_path)).await.unwrap());
+        self.level_completed = Some(load_sound(&format!("{}sounds/level_complete.wav", base_path)).await.unwrap());
+        self.powerup_collected = Some(load_sound(&format!("{}sounds/paddle_grow.wav", base_path)).await.unwrap());
+        self.wall_hit = Some(load_sound(&format!("{}sounds/wall_hit.wav", base_path)).await.unwrap());
         self.background_music = Some(load_sound(&format!("{}sounds/background_music.ogg", base_path)).await.unwrap());
     }
 
@@ -44,6 +44,7 @@ impl AudioManager {
             "life_lost" => self.play_life_lost(),
             "level_completed" => self.play_level_completed(),
             "powerup_collected" => self.play_powerup_collected(),
+            "wall_hit" => self.play_wall_hit(),
             _ => {}
         }
     }
@@ -95,6 +96,15 @@ impl AudioManager {
 
     pub fn play_powerup_collected(&self) {
         if let Some(sound) = self.powerup_collected {
+            play_sound(sound, PlaySoundParams {
+                looped: false,
+                volume: 1.0,
+            });
+        }
+    }
+
+    pub fn play_wall_hit(&self) {
+        if let Some(sound) = self.wall_hit {
             play_sound(sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
