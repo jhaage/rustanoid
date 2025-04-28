@@ -108,99 +108,501 @@ fn reset_game(
 
 fn init_blocks(blocks: &mut Vec<Block>, level: usize) {
     blocks.clear();
-    let (width, height) = match level {
-        1 => (4, 3),      // Level 1: Wider but fewer rows
-        2 => (6, 4),      // Level 2: More blocks
-        3 => (8, 5),      // Level 3: Even more blocks
-        _ => (10, 6),     // Level 4+: Maximum difficulty
-    };
-
-    // Calculate the size of blocks to fit the screen width with padding
-    let padding = 2.0; // Reduced padding
+    
+    // Base configuration for board dimensions
+    let padding = 2.0;
     let available_width = screen_width() * 0.9;
+    
+    // Get level layout based on current level
+    let layout = get_level_layout(level);
+    let (width, height) = (layout.width, layout.height);
+    
+    // Calculate block size based on width
     let block_width = (available_width - (padding * (width as f32 - 1.0))) / width as f32;
     let block_height = block_width * (BLOCK_SIZE.y / BLOCK_SIZE.x);
     let actual_block_size = vec2(block_width, block_height);
-
+    
+    // Calculate board dimensions
     let board_width = (width as f32 * block_width) + ((width - 1) as f32 * padding);
     let board_start_x = (screen_width() - board_width) * 0.5;
     let board_start_y = 50f32;
-
-    // Create initial block layout
+    
+    // Create block layout based on the pattern
     let mut temp_blocks = Vec::new();
-    for i in 0..width * height {
-        let block_x = board_start_x + (i % width) as f32 * (block_width + padding);
-        let block_y = board_start_y + (i / width) as f32 * (block_height + padding);
-        
-        // Create varied patterns based on level
-        let should_create_block = match level {
-            1 => true,  // Level 1: Simple full pattern
-            2 => {
-                // Level 2: Checkerboard pattern in top row
-                let row = i / width;
-                if row == 0 {
-                    (i % width) % 2 == 0
-                } else {
-                    true
-                }
-            },
-            3 => {
-                // Level 3: Alternating gaps in top two rows
-                let row = i / width;
-                if row < 2 {
-                    (i % width + row) % 2 == 0
-                } else {
-                    true
-                }
-            },
-            _ => {
-                // Level 4+: Random gaps in top rows with increasing complexity
-                let row = i / width;
-                if row < 2 {
-                    rand::gen_range(0, 100) < 70  // 70% chance of block in top rows
-                } else {
-                    rand::gen_range(0, 100) < 90  // 90% chance of block in other rows
-                }
+    
+    // Generate blocks based on the layout pattern
+    for y in 0..height {
+        for x in 0..width {
+            let index = y * width + x;
+            
+            // Check if we should create a block at this position
+            if let Some(block_type) = layout.get_block_at(x, y) {
+                let block_x = board_start_x + x as f32 * (block_width + padding);
+                let block_y = board_start_y + y as f32 * (block_height + padding);
+                
+                // Add the block with the specified type
+                temp_blocks.push(Block::new(
+                    vec2(block_x, block_y),
+                    block_type,
+                    actual_block_size,
+                ));
             }
-        };
-
-        if should_create_block {
-            let block_type = if level >= 4 && rand::gen_range(0, 10) < 1 {
-                BlockType::Strong
-            } else if rand::gen_range(0, 10) < 2 {
-                BlockType::Medium
-            } else if rand::gen_range(0, 10) < 1 {
-                BlockType::SpawnPowerup
-            } else {
-                BlockType::Regular
-            };
-
-            temp_blocks.push(Block::new(
-                vec2(block_x, block_y),
-                block_type,
-                actual_block_size,
-            ));
         }
     }
-
-    // Ensure at least one powerup block per level
-    if !temp_blocks.iter().any(|b| b.block_type == BlockType::SpawnPowerup) {
+    
+    // Ensure at least one powerup block per level if we don't already have one
+    if !temp_blocks.iter().any(|b| b.block_type == BlockType::SpawnPowerup) && !temp_blocks.is_empty() {
         let random_index = rand::gen_range(0, temp_blocks.len());
         if let Some(block) = temp_blocks.get_mut(random_index) {
             block.block_type = BlockType::SpawnPowerup;
         }
     }
-
+    
     *blocks = temp_blocks;
 }
 
-fn handle_powerup_collision(player: &mut Player, powerups: &mut Vec<Powerup>) {
+// Structure to define a level layout
+struct LevelLayout {
+    width: usize,
+    height: usize,
+    pattern: Vec<Option<BlockType>>,
+}
+
+impl LevelLayout {
+    fn get_block_at(&self, x: usize, y: usize) -> Option<BlockType> {
+        if x < self.width && y < self.height {
+            self.pattern[y * self.width + x]
+        } else {
+            None
+        }
+    }
+}
+
+fn get_level_layout(level: usize) -> LevelLayout {
+    // Handle regular levels (1-10)
+    let adjusted_level = if level <= 10 { level } else { ((level - 1) % 10) + 1 };
+    
+    match adjusted_level {
+        1 => {
+            // Level 1: Simple pattern with clear path in the middle (beginner friendly)
+            let width = 8;
+            let height = 4;
+            let mut pattern = vec![None; width * height];
+            
+            for y in 0..height {
+                for x in 0..width {
+                    // Leave the middle column empty for an easy path
+                    if x != width / 2 {
+                        pattern[y * width + x] = Some(BlockType::Regular);
+                    }
+                }
+            }
+            
+            // Add a power-up block
+            pattern[1 * width + 1] = Some(BlockType::SpawnPowerup);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        2 => {
+            // Level 2: Zigzag pattern
+            let width = 9;
+            let height = 5;
+            let mut pattern = vec![None; width * height];
+            
+            for y in 0..height {
+                for x in 0..width {
+                    // Create a zigzag pattern by clearing alternating columns
+                    if (y % 2 == 0 && x % 2 == 0) || (y % 2 == 1 && x % 2 == 1) {
+                        pattern[y * width + x] = Some(BlockType::Regular);
+                    }
+                }
+            }
+            
+            // Add some medium blocks
+            pattern[2 * width + 2] = Some(BlockType::Medium);
+            pattern[0 * width + 4] = Some(BlockType::Medium);
+            
+            // Add a power-up block
+            pattern[3 * width + 5] = Some(BlockType::SpawnPowerup);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        3 => {
+            // Level 3: Castle-like pattern
+            let width = 9;
+            let height = 6;
+            let mut pattern = vec![None; width * height];
+            
+            // Build outer walls
+            for y in 0..height {
+                for x in 0..width {
+                    if x == 0 || x == width - 1 || y == 0 || y == height - 1 {
+                        pattern[y * width + x] = Some(BlockType::Medium);
+                    }
+                    // Add interior structures
+                    else if (x == 2 || x == width - 3) && y > 1 {
+                        pattern[y * width + x] = Some(BlockType::Regular);
+                    }
+                }
+            }
+            
+            // Add gates (openings)
+            pattern[height - 1] = None; // Bottom left gate
+            pattern[(height - 1) * width + (width - 1)] = None; // Bottom right gate
+            pattern[0 * width + width / 2] = None; // Top middle gate
+            
+            // Add power-up and strong blocks
+            pattern[2 * width + 4] = Some(BlockType::SpawnPowerup);
+            pattern[3 * width + 4] = Some(BlockType::Strong);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        4 => {
+            // Level 4: Snake pattern
+            let width = 10;
+            let height = 6;
+            let mut pattern = vec![None; width * height];
+            
+            for y in 0..height {
+                for x in 0..width {
+                    // Create a snake-like pattern
+                    if y % 2 == 0 {
+                        // Even rows: fill all except rightmost cell
+                        if x < width - 1 {
+                            pattern[y * width + x] = Some(BlockType::Regular);
+                        }
+                    } else {
+                        // Odd rows: fill all except leftmost cell
+                        if x > 0 {
+                            pattern[y * width + x] = Some(BlockType::Regular);
+                        }
+                    }
+                }
+            }
+            
+            // Add some strong blocks at the turns
+            for y in 1..height-1 {
+                if y % 2 == 0 {
+                    pattern[y * width + (width - 2)] = Some(BlockType::Strong);
+                } else {
+                    pattern[y * width + 1] = Some(BlockType::Strong);
+                }
+            }
+            
+            // Add power-ups
+            pattern[1 * width + 5] = Some(BlockType::SpawnPowerup);
+            pattern[3 * width + 5] = Some(BlockType::SpawnBallOnDeath);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        5 => {
+            // Level 5: Concentric squares
+            let width = 11;
+            let height = 7;
+            let mut pattern = vec![None; width * height];
+            
+            for y in 0..height {
+                for x in 0..width {
+                    // Create concentric squares
+                    let distance = y.min(height - 1 - y).min(x).min(width - 1 - x);
+                    
+                    match distance {
+                        0 => pattern[y * width + x] = Some(BlockType::Strong),
+                        1 => pattern[y * width + x] = Some(BlockType::Medium),
+                        2 => pattern[y * width + x] = Some(BlockType::Regular),
+                        _ => {} // Leave empty
+                    }
+                }
+            }
+            
+            // Create entry points into the squares
+            pattern[0 * width + width / 2] = None; // Top middle
+            pattern[(height - 1) * width + width / 2] = None; // Bottom middle
+            pattern[height / 2 * width + 0] = None; // Middle left
+            pattern[height / 2 * width + (width - 1)] = None; // Middle right
+            
+            // Add power-ups
+            pattern[2 * width + 2] = Some(BlockType::SpawnPowerup);
+            pattern[4 * width + 8] = Some(BlockType::SpawnPowerup);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        6 => {
+            // Level 6: Branching paths
+            let width = 12;
+            let height = 7;
+            let mut pattern = vec![Some(BlockType::Regular); width * height];
+            
+            // Create main path
+            for x in 0..width {
+                pattern[3 * width + x] = None;
+            }
+            
+            // Create vertical paths
+            for y in 0..height {
+                pattern[y * width + 2] = None;
+                pattern[y * width + 5] = None;
+                pattern[y * width + 9] = None;
+            }
+            
+            // Add stronger blocks in key positions
+            for y in 0..height {
+                for x in 0..width {
+                    if (y == 1 || y == 5) && (x == 1 || x == 6 || x == 10) {
+                        pattern[y * width + x] = Some(BlockType::Medium);
+                    }
+                    if (y == 0 || y == 6) && (x % 4 == 0) {
+                        pattern[y * width + x] = Some(BlockType::Strong);
+                    }
+                }
+            }
+            
+            // Add power-ups
+            pattern[1 * width + 3] = Some(BlockType::SpawnPowerup);
+            pattern[5 * width + 8] = Some(BlockType::SpawnBallOnDeath);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        7 => {
+            // Level 7: Diamond pattern
+            let width = 13;
+            let height = 8;
+            let mut pattern = vec![None; width * height];
+            
+            let center_x = width / 2;
+            let center_y = height / 2;
+            
+            for y in 0..height {
+                for x in 0..width {
+                    // Calculate Manhattan distance from center
+                    let dist = (x as isize - center_x as isize).abs() + 
+                               (y as isize - center_y as isize).abs();
+                    
+                    if dist <= 4 && dist % 2 == 0 {
+                        if dist == 0 {
+                            pattern[y * width + x] = Some(BlockType::Strong);
+                        } else {
+                            pattern[y * width + x] = Some(BlockType::Regular);
+                        }
+                    } else if dist <= 6 && x % 2 == y % 2 {
+                        pattern[y * width + x] = Some(BlockType::Medium);
+                    }
+                }
+            }
+            
+            // Add diagonal paths
+            for i in 0..width.min(height) {
+                if i < width && i < height {
+                    pattern[i * width + i] = None;
+                }
+                if i < height && (width - 1 - i) < width {
+                    pattern[i * width + (width - 1 - i)] = None;
+                }
+            }
+            
+            // Add power-ups
+            pattern[1 * width + center_x] = Some(BlockType::SpawnPowerup);
+            pattern[(height - 2) * width + center_x] = Some(BlockType::SpawnBallOnDeath);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        8 => {
+            // Level 8: Tetris pieces layout
+            let width = 10;
+            let height = 8;
+            let mut pattern = vec![None; width * height];
+            
+            // Create background with some gaps
+            for y in 0..height {
+                for x in 0..width {
+                    if (x + y) % 4 != 0 {
+                        pattern[y * width + x] = Some(BlockType::Regular);
+                    }
+                }
+            }
+            
+            // Create Tetris I-piece (vertical)
+            for y in 1..5 {
+                pattern[y * width + 2] = Some(BlockType::Medium);
+            }
+            
+            // Create Tetris T-piece
+            pattern[2 * width + 6] = Some(BlockType::Medium);
+            pattern[3 * width + 5] = Some(BlockType::Medium);
+            pattern[3 * width + 6] = Some(BlockType::Medium);
+            pattern[3 * width + 7] = Some(BlockType::Medium);
+            
+            // Create Tetris L-piece
+            pattern[5 * width + 3] = Some(BlockType::Medium);
+            pattern[6 * width + 3] = Some(BlockType::Medium);
+            pattern[7 * width + 3] = Some(BlockType::Medium);
+            pattern[7 * width + 4] = Some(BlockType::Medium);
+            
+            // Create Tetris square piece
+            pattern[5 * width + 7] = Some(BlockType::Strong);
+            pattern[5 * width + 8] = Some(BlockType::Strong);
+            pattern[6 * width + 7] = Some(BlockType::Strong);
+            pattern[6 * width + 8] = Some(BlockType::Strong);
+            
+            // Add power-ups
+            pattern[1 * width + 7] = Some(BlockType::SpawnPowerup);
+            pattern[6 * width + 1] = Some(BlockType::SpawnBallOnDeath);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        9 => {
+            // Level 9: Grid with strong center
+            let width = 11;
+            let height = 9;
+            let mut pattern = vec![None; width * height];
+            
+            // Create grid pattern
+            for y in 0..height {
+                for x in 0..width {
+                    if x % 3 == 0 || y % 3 == 0 {
+                        pattern[y * width + x] = Some(BlockType::Regular);
+                        
+                        // Make the central crossing stronger
+                        if (x == 3 || x == 6) && (y == 3 || y == 6) {
+                            pattern[y * width + x] = Some(BlockType::Medium);
+                        }
+                    }
+                }
+            }
+            
+            // Create a strong center
+            for y in 4..=5 {
+                for x in 4..=6 {
+                    pattern[y * width + x] = Some(BlockType::Strong);
+                }
+            }
+            
+            // Create tunnels by removing some blocks
+            for i in 0..width {
+                // Horizontal tunnels
+                pattern[1 * width + i] = None;
+                pattern[7 * width + i] = None;
+            }
+            
+            for i in 0..height {
+                // Vertical tunnels
+                pattern[i * width + 1] = None;
+                pattern[i * width + 9] = None;
+            }
+            
+            // Add power-ups
+            pattern[2 * width + 5] = Some(BlockType::SpawnPowerup);
+            pattern[6 * width + 5] = Some(BlockType::SpawnBallOnDeath);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        10 => {
+            // Level 10: Maze-like pattern
+            let width = 14;
+            let height = 10;
+            let mut pattern = vec![None; width * height];
+            
+            // First, fill all with regular blocks
+            for y in 0..height {
+                for x in 0..width {
+                    pattern[y * width + x] = Some(BlockType::Regular);
+                }
+            }
+            
+            // Create maze paths (using horizontal and vertical lines)
+            
+            // Horizontal paths
+            for x in 1..width-1 {
+                pattern[1 * width + x] = None;
+                pattern[3 * width + x] = None;
+                pattern[5 * width + x] = None;
+                pattern[7 * width + x] = None;
+                pattern[9 * width + x] = None;
+            }
+            
+            // Vertical paths - connect the horizontal paths
+            for y in 0..height {
+                pattern[y * width + 2] = None;
+                pattern[y * width + 5] = None;
+                pattern[y * width + 8] = None;
+                pattern[y * width + 11] = None;
+            }
+            
+            // Block some of the connections to create a more maze-like structure
+            pattern[1 * width + 5] = Some(BlockType::Medium);
+            pattern[3 * width + 2] = Some(BlockType::Medium);
+            pattern[5 * width + 11] = Some(BlockType::Medium);
+            pattern[7 * width + 8] = Some(BlockType::Medium);
+            pattern[9 * width + 5] = Some(BlockType::Medium);
+            
+            // Add some strong blocks at strategic locations
+            pattern[2 * width + 3] = Some(BlockType::Strong);
+            pattern[4 * width + 6] = Some(BlockType::Strong);
+            pattern[6 * width + 9] = Some(BlockType::Strong);
+            pattern[8 * width + 12] = Some(BlockType::Strong);
+            
+            // Add a few more medium blocks to increase difficulty
+            pattern[0 * width + 0] = Some(BlockType::Medium);
+            pattern[0 * width + width-1] = Some(BlockType::Medium);
+            pattern[(height-1) * width + 0] = Some(BlockType::Medium);
+            pattern[(height-1) * width + width-1] = Some(BlockType::Medium);
+            
+            // Add power-ups
+            pattern[2 * width + 7] = Some(BlockType::SpawnPowerup);
+            pattern[6 * width + 3] = Some(BlockType::SpawnPowerup);
+            pattern[8 * width + 10] = Some(BlockType::SpawnBallOnDeath);
+            
+            LevelLayout { width, height, pattern }
+        },
+        
+        // Default case for levels beyond 10 (loops back to level 1-10 patterns but with increased difficulty)
+        _ => {
+            // This should never happen due to the adjusted_level calculation above
+            // But returning a simple layout just in case
+            let layout = get_level_layout(1);
+            
+            // Increase the difficulty by converting regular blocks to medium/strong ones
+            let mut pattern = layout.pattern;
+            let difficulty_factor = (level / 10) + 1;
+            
+            for i in 0..pattern.len() {
+                if let Some(block_type) = pattern[i] {
+                    // As levels progress, increase the chance of stronger blocks
+                    let random_val = rand::gen_range(0, 10);
+                    if random_val < difficulty_factor {
+                        pattern[i] = Some(BlockType::Strong);
+                    } else if random_val < difficulty_factor * 2 {
+                        pattern[i] = Some(BlockType::Medium);
+                    }
+                }
+            }
+            
+            LevelLayout {
+                width: layout.width,
+                height: layout.height,
+                pattern,
+            }
+        }
+    }
+}
+
+fn handle_powerup_collision(player: &mut Player, powerups: &mut Vec<Powerup>, audio_manager: &AudioManager) {
     let max_paddle_width = screen_width() / 3.0;
     
     powerups.retain(|powerup| {
         if powerup.rect.overlaps(&player.rect) {
             // Apply powerup effect: Increase paddle size, but limit to max width
             player.rect.w = (player.rect.w + 50f32).min(max_paddle_width);
+            audio_manager.play_sound_effect("powerup_collected");
             false // Remove the powerup after collision
         } else {
             true
@@ -282,7 +684,7 @@ async fn main() {
                 for powerup in powerups.iter_mut() {
                     powerup.update(get_frame_time());
                 }
-                handle_powerup_collision(&mut player, &mut powerups);
+                handle_powerup_collision(&mut player, &mut powerups, &audio_manager);
 
                 let balls_len = balls.len();
                 balls.retain(|ball| ball.rect.y < screen_height());
@@ -299,6 +701,7 @@ async fn main() {
                 blocks.retain(|block| block.lives > 0);
                 if blocks.is_empty() {
                     game_state = GameState::LevelCompleted;
+                    audio_manager.play_sound_effect("level_completed");
                 }
             }
             GameState::LevelCompleted => {

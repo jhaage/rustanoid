@@ -1,9 +1,9 @@
 use macroquad::prelude::*;
 use crate::game_objects::texture_manager::TextureManager;
 
-pub const BLOCK_SIZE: Vec2 = Vec2::from_array([100f32, 40f32]);
+pub const BLOCK_SIZE: Vec2 = vec2(100f32, 40f32);
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum BlockType {
     Regular,
     SpawnBallOnDeath,
