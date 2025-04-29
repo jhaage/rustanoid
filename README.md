@@ -89,7 +89,7 @@ This project includes scripts to deploy the game to another website project dire
 
    On Windows:
    ```
-   deploy-to-website.bat
+   .\deploy-to-website.bat
    ```
 
 The deployment scripts will:
