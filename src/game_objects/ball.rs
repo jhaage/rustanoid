@@ -47,9 +47,9 @@ impl Ball {
     }
 
     pub fn draw(&self, texture_manager: &TextureManager) {
-        if let Some(texture) = texture_manager.ball_texture {
+        if let Some(texture) = &texture_manager.ball_texture {
             draw_texture_ex(
-                texture,
+                &texture,
                 self.rect.x,
                 self.rect.y,
                 WHITE,

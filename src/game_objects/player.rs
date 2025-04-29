@@ -39,9 +39,9 @@ impl Player {
     }
 
     pub fn draw(&self, texture_manager: &TextureManager) {
-        if let Some(texture) = texture_manager.paddle_texture {
+        if let Some(texture) = &texture_manager.paddle_texture {
             draw_texture_ex(
-                texture,
+                &texture,
                 self.rect.x,
                 self.rect.y,
                 WHITE,

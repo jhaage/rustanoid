@@ -50,8 +50,8 @@ impl AudioManager {
     }
 
     pub fn play_paddle_hit(&self) {
-        if let Some(sound) = self.paddle_hit {
-            play_sound(sound, PlaySoundParams {
+        if let Some(sound) = &self.paddle_hit {
+            play_sound(&sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
             });
@@ -59,8 +59,8 @@ impl AudioManager {
     }
 
     pub fn play_brick_hit(&self) {
-        if let Some(sound) = self.brick_hit {
-            play_sound(sound, PlaySoundParams {
+        if let Some(sound) = &self.brick_hit {
+            play_sound(&sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
             });
@@ -68,8 +68,8 @@ impl AudioManager {
     }
 
     pub fn play_brick_destroyed(&self) {
-        if let Some(sound) = self.brick_destroyed {
-            play_sound(sound, PlaySoundParams {
+        if let Some(sound) = &self.brick_destroyed {
+            play_sound(&sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
             });
@@ -77,8 +77,8 @@ impl AudioManager {
     }
 
     pub fn play_life_lost(&self) {
-        if let Some(sound) = self.life_lost {
-            play_sound(sound, PlaySoundParams {
+        if let Some(sound) = &self.life_lost {
+            play_sound(&sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
             });
@@ -86,8 +86,8 @@ impl AudioManager {
     }
 
     pub fn play_level_completed(&self) {
-        if let Some(sound) = self.level_completed {
-            play_sound(sound, PlaySoundParams {
+        if let Some(sound) = &self.level_completed {
+            play_sound(&sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
             });
@@ -95,8 +95,8 @@ impl AudioManager {
     }
 
     pub fn play_powerup_collected(&self) {
-        if let Some(sound) = self.powerup_collected {
-            play_sound(sound, PlaySoundParams {
+        if let Some(sound) = &self.powerup_collected {
+            play_sound(&sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
             });
@@ -104,8 +104,8 @@ impl AudioManager {
     }
 
     pub fn play_wall_hit(&self) {
-        if let Some(sound) = self.wall_hit {
-            play_sound(sound, PlaySoundParams {
+        if let Some(sound) = &self.wall_hit {
+            play_sound(&sound, PlaySoundParams {
                 looped: false,
                 volume: 1.0,
             });
@@ -113,8 +113,8 @@ impl AudioManager {
     }
 
     pub fn play_background_music(&self) {
-        if let Some(music) = self.background_music {
-            play_sound(music, PlaySoundParams {
+        if let Some(music) = &self.background_music {
+            play_sound(&music, PlaySoundParams {
                 looped: true,
                 volume: 0.5,
             });

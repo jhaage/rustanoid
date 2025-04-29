@@ -50,9 +50,9 @@ impl Block {
             BlockType::SpawnPowerup => BLUE,
         };
         
-        if let Some(texture) = texture_manager.block_texture {
+        if let Some(texture) = &texture_manager.block_texture {
             draw_texture_ex(
-                texture,
+                &texture,
                 self.rect.x,
                 self.rect.y,
                 color,

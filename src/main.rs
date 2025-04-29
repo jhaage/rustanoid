@@ -18,13 +18,13 @@ pub enum GameState {
     Dead,
 }
 
-pub fn draw_title_text(text: &str, font: Font) {
+pub fn draw_title_text(text: &str, font: &Font) {
     let dims = measure_text(text, Some(font), 50u16, 1.0f32);
     draw_text_ex(
         text,
         screen_width() * 0.5f32 - dims.width * 0.5f32,
         screen_height() * 0.5f32 - dims.height * 0.5f32,
-        TextParams{font, font_size: 50u16, color: BLACK, ..Default::default()}
+        TextParams{font: Some(font), font_size: 50u16, color: BLACK, ..Default::default()}
     );
 }
 
@@ -812,9 +812,9 @@ async fn main() {
             }
         }
 
-        if let Some(bg_texture) = texture_manager.background_texture {
+        if let Some(bg_texture) = &texture_manager.background_texture {
             draw_texture_ex(
-                bg_texture,
+                &bg_texture,
                 0.0,
                 0.0,
                 Color::new(0.7, 0.7, 0.7, 1.0),
@@ -840,51 +840,51 @@ async fn main() {
 
         match game_state {
             GameState::Menu => {
-                draw_title_text("Press SPACE to start", font);
+                draw_title_text("Press SPACE to start", &font);
             }
             GameState::Game => {
                 let score_text = format!("score: {}", score);
-                let score_text_dim = measure_text(&score_text, Some(font), 30u16, 1.0);
+                let score_text_dim = measure_text(&score_text, Some(&font), 30u16, 1.0);
                 draw_text_ex(
                     &score_text,
                     screen_width() * 0.5f32 - score_text_dim.width * 0.5f32,
                     40.0,
-                    TextParams { font, font_size: 30u16, color: BLACK, ..Default::default() },
+                    TextParams { font: Some(&font), font_size: 30u16, color: BLACK, ..Default::default() },
                 );
 
                 draw_text_ex(
                     &format!("lives: {}", player_lives),
                     30.0,
                     40.0,
-                    TextParams { font, font_size: 30u16, color: BLACK, ..Default::default() },
+                    TextParams { font: Some(&font), font_size: 30u16, color: BLACK, ..Default::default() },
                 );
 
                 let level_text = format!("Level: {}", current_level);
-                let level_text_dim = measure_text(&level_text, Some(font), 30u16, 1.0);
+                let level_text_dim = measure_text(&level_text, Some(&font), 30u16, 1.0);
                 draw_text_ex(
                     &level_text,
                     screen_width() - level_text_dim.width - 30.0,
                     40.0,
-                    TextParams { font, font_size: 30u16, color: BLACK, ..Default::default()},
+                    TextParams { font: Some(&font), font_size: 30u16, color: BLACK, ..Default::default()},
                 );
 
                 // Show dev mode message if enabled
                 if dev_mode && show_dev_message {
                     let dev_message = format!("Dev Mode: Level {}", current_level);
-                    let dev_message_dim = measure_text(&dev_message, Some(font), 20u16, 1.0);
+                    let dev_message_dim = measure_text(&dev_message, Some(&font), 20u16, 1.0);
                     draw_text_ex(
                         &dev_message,
                         screen_width() * 0.5f32 - dev_message_dim.width * 0.5f32,
                         screen_height() - 40.0,
-                        TextParams { font, font_size: 20u16, color: RED, ..Default::default() },
+                        TextParams { font: Some(&font), font_size: 20u16, color: RED, ..Default::default() },
                     );
                 }
             }
             GameState::LevelCompleted => {
-                draw_title_text(&format!("Level {} Completed!", current_level), font);
+                draw_title_text(&format!("Level {} Completed!", current_level), &font);
             }
             GameState::Dead => {
-                draw_title_text(&format!("Game over. Your score: {}", score), font);
+                draw_title_text(&format!("Game over. Your score: {}", score), &font);
             }
         }
 

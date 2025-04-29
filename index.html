@@ -33,8 +33,22 @@
 </head>
 <body>
     <canvas id="glcanvas" tabindex="1"></canvas>
-    <!-- Minified and statically hosted version of https://github.com/not-fl3/miniquad/blob/master/native/sapp-wasm/js/gl.js -->
-    <script src="https://not-fl3.github.io/miniquad-samples/gl.js"></script>
-    <script>load("rustanoid.wasm");</script>
+    <!-- Use a compatible version of gl.js that supports required audio functions -->
+    <script src="https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js"></script>
+    <script>
+        console.log("Starting to load WASM file...");
+        
+        // Add error handling for WASM loading
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error("Error occurred:", message, "at", source, ":", lineno);
+            return false;
+        };
+        
+        try {
+            load("rustanoid.wasm");
+        } catch (e) {
+            console.error("Exception during WASM loading:", e);
+        }
+    </script>
 </body>
 </html>
